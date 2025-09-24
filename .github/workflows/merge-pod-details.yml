@@ -1,40 +1,36 @@
-name: Capture Pod Details and Store in Log History on Merge (Public)
+name: Capture Merge Details from Main to Dev
 
 on:
-  push:
+  pull_request:
+    types: [closed]
     branches:
       - dev
-    # Trigger when code is merged into dev branch
 
 jobs:
-  capture-pod-details:
+  capture-merge-details:
+    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'dev' && github.event.pull_request.head.ref == 'main'
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout the repository
-      - name: Checkout Repository
+      - name: Checkout repository
         uses: actions/checkout@v3
 
-      # Step 2: Set up kubectl with Kubernetes configuration stored in GitHub Secrets
-      - name: Set up kubectl
-        uses: azure/setup-kubectl@v3
-        with:
-          kubeconfig: ${{ secrets.KUBE_CONFIG }}  # Kubernetes config securely stored in GitHub Secrets
-
-      # Step 3: Capture Kubernetes pod details and store them as a file
-      - name: Get Pod details
+      - name: Capture merge details
         run: |
-          kubectl get pods -o json > pod_details.json
-          export UNIQUE_ID=$(date +%Y%m%d%H%M%S)-${GITHUB_SHA}
-          mv pod_details.json "loghistory/pod_details_${UNIQUE_ID}.json"
-          
-      # Step 4: Commit the changes back to GitHub
-      - name: Commit Pod Details to GitHub
+          mkdir -p loghistory
+          UNIQUE_ID=$(date +%Y%m%d%H%M%S)-${{ github.sha }}
+          echo "Merge Timestamp: $(date)" > loghistory/merge_${UNIQUE_ID}.txt
+          echo "Merged By: ${{ github.actor }}" >> loghistory/merge_${UNIQUE_ID}.txt
+          echo "PR Title: ${{ github.event.pull_request.title }}" >> loghistory/merge_${UNIQUE_ID}.txt
+          echo "PR Number: ${{ github.event.pull_request.number }}" >> loghistory/merge_${UNIQUE_ID}.txt
+          echo "Commit SHA: ${{ github.event.pull_request.merge_commit_sha }}" >> loghistory/merge_${UNIQUE_ID}.txt
+
+      - name: Commit merge log
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git add loghistory/
-          git commit -m "Add Pod details for ${UNIQUE_ID} to loghistory"
+          git commit -m "Log merge from main to dev: ${UNIQUE_ID}"
           git push
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Automatically provided in GitHub Actions
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
