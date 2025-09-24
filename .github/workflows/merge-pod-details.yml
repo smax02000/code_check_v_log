@@ -3,7 +3,7 @@ name: Capture Pod Details and Store in Log History on Merge (Public)
 on:
   push:
     branches:
-      - main
+      - dev
     # Trigger when code is merged into dev branch
 
 jobs:
