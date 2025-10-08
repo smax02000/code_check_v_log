@@ -1,36 +1,41 @@
-name: Capture Merge Details from Main to Dev
+name: Capture and Commit PR Details
 
 on:
   pull_request:
-    types: [closed]
-    branches:
-      - dev
+    types: [opened, closed]
 
 jobs:
-  capture-merge-details:
-    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'dev' && github.event.pull_request.head.ref == 'main'
-    runs-on: ubuntu-latest
+  capture-pr-info:
+    runs-on: self-hosted
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Capture merge details
+      - name: Configure Git
         run: |
-          mkdir -p loghistory
-          UNIQUE_ID=$(date +%Y%m%d%H%M%S)-${{ github.sha }}
-          echo "Merge Timestamp: $(date)" > loghistory/merge_${UNIQUE_ID}.txt
-          echo "Merged By: ${{ github.actor }}" >> loghistory/merge_${UNIQUE_ID}.txt
-          echo "PR Title: ${{ github.event.pull_request.title }}" >> loghistory/merge_${UNIQUE_ID}.txt
-          echo "PR Number: ${{ github.event.pull_request.number }}" >> loghistory/merge_${UNIQUE_ID}.txt
-          echo "Commit SHA: ${{ github.event.pull_request.merge_commit_sha }}" >> loghistory/merge_${UNIQUE_ID}.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Commit merge log
+      - name: Capture PR details and store in CSV
         run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-          git add loghistory/
-          git commit -m "Log merge from main to dev: ${UNIQUE_ID}"
-          git push
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          FILE="pr_details.csv"
+
+          # Create file with header if it doesn’t exist
+          if [ ! -f "$FILE" ]; then
+            echo "timestamp,pr_number,title,author,created_at,state,merged,merged_at,base_branch,head_branch,repository" > "$FILE"
+          fi
+
+          # Append PR details
+          echo "$(date '+%Y-%m-%d %H:%M:%S'),${{ github.event.pull_request.number }},\"${{ github.event.pull_request.title }}\",${{ github.event.pull_request.user.login }},${{ github.event.pull_request.created_at }},${{ github.event.pull_request.state }},${{ github.event.pull_request.merged }},${{ github.event.pull_request.merged_at }},${{ github.event.pull_request.base.ref }},${{ github.event.pull_request.head.ref }},${{ github.repository }}" >> "$FILE"
+
+          echo "✅ PR details appended to $FILE"
+          cat "$FILE"
+
+      - name: Commit and push CSV log
+        run: |
+          git add pr_details.csv
+          git commit -m "Update PR log for #${{ github.event.pull_request.number }}" || echo "No changes to commit"
+          git push origin HEAD:${{ github.ref_name }}
