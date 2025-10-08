@@ -1,4 +1,4 @@
-name: Capture and Commit PR Details
+name: Capture and Commit PR Details (Windows)
 
 on:
   pull_request:
@@ -6,7 +6,7 @@ on:
 
 jobs:
   capture-pr-info:
-    runs-on: self-hosted
+    runs-on: [self-hosted, Windows]
 
     steps:
       - name: Checkout repository
@@ -18,24 +18,37 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+        shell: pwsh
 
       - name: Capture PR details and store in CSV
+        shell: pwsh
         run: |
-          FILE="pr_details.csv"
+          $file = "pr_details.csv"
+          if (-not (Test-Path $file)) {
+              "timestamp,pr_number,title,author,created_at,state,merged,merged_at,base_branch,head_branch,repository" | Out-File -FilePath $file -Encoding utf8
+          }
 
-          # Create file with header if it doesn’t exist
-          if [ ! -f "$FILE" ]; then
-            echo "timestamp,pr_number,title,author,created_at,state,merged,merged_at,base_branch,head_branch,repository" > "$FILE"
-          fi
+          $timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+          $prNumber  = "${{ github.event.pull_request.number }}"
+          $title     = "${{ github.event.pull_request.title }}".Replace('"', '""')
+          $author    = "${{ github.event.pull_request.user.login }}"
+          $createdAt = "${{ github.event.pull_request.created_at }}"
+          $state     = "${{ github.event.pull_request.state }}"
+          $merged    = "${{ github.event.pull_request.merged }}"
+          $mergedAt  = "${{ github.event.pull_request.merged_at }}"
+          $base      = "${{ github.event.pull_request.base.ref }}"
+          $head      = "${{ github.event.pull_request.head.ref }}"
+          $repo      = "${{ github.repository }}"
 
-          # Append PR details
-          echo "$(date '+%Y-%m-%d %H:%M:%S'),${{ github.event.pull_request.number }},\"${{ github.event.pull_request.title }}\",${{ github.event.pull_request.user.login }},${{ github.event.pull_request.created_at }},${{ github.event.pull_request.state }},${{ github.event.pull_request.merged }},${{ github.event.pull_request.merged_at }},${{ github.event.pull_request.base.ref }},${{ github.event.pull_request.head.ref }},${{ github.repository }}" >> "$FILE"
+          $line = "$timestamp,$prNumber,""$title"",$author,$createdAt,$state,$merged,$mergedAt,$base,$head,$repo"
+          Add-Content -Path $file -Value $line
 
-          echo "✅ PR details appended to $FILE"
-          cat "$FILE"
+          Write-Host "✅ PR details appended to $file"
+          Get-Content $file | Select-Object -Last 5
 
       - name: Commit and push CSV log
+        shell: pwsh
         run: |
           git add pr_details.csv
-          git commit -m "Update PR log for #${{ github.event.pull_request.number }}" || echo "No changes to commit"
+          git commit -m "Update PR log for #${{ github.event.pull_request.number }}" -a || Write-Host "No changes to commit"
           git push origin HEAD:${{ github.ref_name }}
